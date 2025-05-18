@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct deviceinfodemoApp: App {
+    
+    @StateObject var deviceManager: DeviceManager = DeviceManager()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(deviceManager)
         }
     }
 }

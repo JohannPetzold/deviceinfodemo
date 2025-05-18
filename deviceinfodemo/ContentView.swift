@@ -8,14 +8,30 @@
 import SwiftUI
 
 struct ContentView: View {
+    
+    @EnvironmentObject var deviceManager: DeviceManager
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
+        VStack(spacing: 32) {
+            
+            Image(systemName: deviceImageName())
+                .resizable()
+                .scaledToFit()
+                .frame(width: 248, height: 196)
                 .foregroundStyle(.tint)
-            Text("Hello, world!")
+            
+            Text("\(deviceManager.orientation.rawValue.capitalized) (\(deviceManager.orientationDetail.rawValue))")
+                .bold()
+            
         }
-        .padding()
+    }
+    
+    private func deviceImageName() -> String {
+        switch deviceManager.deviceType {
+        case .iPhone: return "iphone"
+        case .iPad: return "ipad"
+        case .mac: return "macbook"
+        }
     }
 }
 
