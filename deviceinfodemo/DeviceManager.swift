@@ -15,14 +15,17 @@ fileprivate let logger: Logger = .init(subsystem: "DeviceInfoDemo", category: "D
 class DeviceManager: ObservableObject {
     
     var deviceType: DeviceType
-    @Published var orientation: DeviceOrientation
-    @Published var orientationDetail: DeviceOrientationDetail
-    @Published var orientationChangePublisher: AnyCancellable?
+    @Published var interfaceOrientation: InterfaceOrientation
+    @Published var deviceOrientation: DeviceOrientation
+    @Published var deviceOrientationDetail: DeviceOrientationDetail
+    
+    var cancellables: Set<AnyCancellable> = []
     
     init() {
         deviceType = DeviceType.getType()
-        orientation = DeviceOrientation.getDeviceOrientation()
-        orientationDetail = DeviceOrientationDetail.getDeviceOrientationDetail()
+        interfaceOrientation = InterfaceOrientation.getInterfaceOrientation()
+        deviceOrientation = DeviceOrientation.getDeviceOrientation()
+        deviceOrientationDetail = DeviceOrientationDetail.getDeviceOrientationDetail()
         logger.debug("Type: \(self.deviceType.rawValue)")
         #if os(iOS)
         initOrientationPublisher()
@@ -36,46 +39,69 @@ class DeviceManager: ObservableObject {
     }
     
     #if os(iOS)
-    func updateOrientation(_ orientation: UIDeviceOrientation) {
-        if orientation.isPortrait {
-            self.orientation = .portrait
-        } else if orientation.isLandscape {
-            self.orientation = .landscape
-        } else if orientation.isFlat {
-            self.orientation = .flat
-        } else {
-            self.orientation = .unknown
+    func updateInterfaceOrientation(_ orientation: UIInterfaceOrientation) -> InterfaceOrientation {
+        switch orientation {
+        case .portrait: return .portrait
+        case .portraitUpsideDown: return .portraitUpsideDown
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        default: return .unknown
         }
     }
     
-    func updateOrientationDetail(_ orientation: UIDeviceOrientation) {
+    func updateDeviceOrientation(_ orientation: UIDeviceOrientation) {
         switch orientation {
-        case .unknown: self.orientationDetail = .unknown
-        case .portrait: self.orientationDetail = .portrait
-        case .portraitUpsideDown: self.orientationDetail = .portraitUpsideDown
-        case .landscapeLeft: self.orientationDetail = .landscapeLeft
-        case .landscapeRight: self.orientationDetail = .landscapeRight
-        case .faceUp: self.orientationDetail = .faceUp
-        case .faceDown: self.orientationDetail = .faceDown
-        @unknown default: self.orientationDetail = .unknown
+        case .portrait:
+            updateOrientationValues(correctOrientation: orientation.isPortrait, orientation: .portrait, detailOrientation: .portrait)
+        case .portraitUpsideDown:
+            updateOrientationValues(correctOrientation: orientation.isPortrait, orientation: .portrait, detailOrientation: .portraitUpsideDown)
+        case .landscapeLeft:
+            updateOrientationValues(correctOrientation: orientation.isLandscape, orientation: .landscape, detailOrientation: .landscapeLeft)
+        case .landscapeRight:
+            updateOrientationValues(correctOrientation: orientation.isLandscape, orientation: .landscape, detailOrientation: .landscapeRight)
+        case .faceUp:
+            updateOrientationValues(correctOrientation: orientation.isFlat, orientation: .flat, detailOrientation: .faceUp)
+        case .faceDown:
+            updateOrientationValues(correctOrientation: orientation.isFlat, orientation: .flat, detailOrientation: .faceDown)
+        default:
+            self.deviceOrientationDetail = .unknown
+        }
+    }
+    
+    private func updateOrientationValues(correctOrientation: Bool, orientation: DeviceOrientation, detailOrientation: DeviceOrientationDetail) {
+        self.deviceOrientationDetail = detailOrientation
+        if correctOrientation {
+            self.deviceOrientation = orientation
         }
     }
     
     func initOrientationPublisher() -> Void {
+        NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
+            .compactMap { notification in
+                UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first?.interfaceOrientation
+            }
+            .sink { newOrientation in
+                self.interfaceOrientation = self.updateInterfaceOrientation(newOrientation)
+                logger.debug("New orientation: \(self.interfaceOrientation.rawValue)")
+            }
+            .store(in: &cancellables)
+        
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        orientationChangePublisher = NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
+        NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
             .compactMap { notification in
                 UIDevice.current.orientation
             }
             .sink { newOrientation in
-                self.updateOrientation(newOrientation)
-                self.updateOrientationDetail(newOrientation)
-                logger.debug("New orientation: \(self.orientation.rawValue) (\(self.orientationDetail.rawValue))")
+                self.updateDeviceOrientation(newOrientation)
+                logger.debug("New orientation: \(self.deviceOrientation.rawValue) (\(self.deviceOrientationDetail.rawValue))")
             }
+            .store(in: &cancellables)
     }
     
     func cancelOrientationPublisher() -> Void {
-        orientationChangePublisher?.cancel()
+        cancellables.removeAll()
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
     #endif
@@ -99,11 +125,38 @@ enum DeviceType: String {
     }
 }
 
+enum InterfaceOrientation : String {
+    case unknown
+    case portrait
+    case portraitUpsideDown
+    case landscapeLeft
+    case landscapeRight
+    case none
+    
+    static func getInterfaceOrientation() -> InterfaceOrientation {
+        #if os(iOS)
+        guard let orientation = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.interfaceOrientation else { return .unknown }
+        switch orientation {
+        case .portrait: return .portrait
+        case .portraitUpsideDown: return .portraitUpsideDown
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        default: return .unknown
+        }
+        #elseif os(macOS)
+        return .none
+        #endif
+    }
+}
+
 enum DeviceOrientation: String {
     case portrait
     case landscape
     case flat
     case unknown
+    case none
     
     static func getDeviceOrientation() -> DeviceOrientation {
         #if os(iOS)
@@ -118,7 +171,7 @@ enum DeviceOrientation: String {
             return .unknown
         }
         #elseif os(macOS)
-        return .unknown
+        return .none
         #endif
     }
 }
@@ -131,6 +184,7 @@ enum DeviceOrientationDetail: String {
     case faceUp
     case faceDown
     case unknown
+    case none
     
     static func getDeviceOrientationDetail() -> DeviceOrientationDetail {
         #if os(iOS)
@@ -146,7 +200,7 @@ enum DeviceOrientationDetail: String {
         @unknown default: return .unknown
         }
         #elseif os(macOS)
-        return .unknown
+        return .none
         #endif
     }
 }

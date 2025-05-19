@@ -20,8 +20,13 @@ struct ContentView: View {
                 .frame(width: 248, height: 196)
                 .foregroundStyle(.tint)
             
-            Text("\(deviceManager.orientation.rawValue.capitalized) (\(deviceManager.orientationDetail.rawValue))")
-                .bold()
+            VStack(spacing: 8) {
+                Text("Interface: \(deviceManager.interfaceOrientation.rawValue)")
+                    .bold()
+                
+                Text("Device: \(deviceManager.deviceOrientation.rawValue) (\(deviceManager.deviceOrientationDetail.rawValue))")
+                    .bold()
+            }
             
         }
     }
