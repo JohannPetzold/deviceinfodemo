@@ -54,8 +54,9 @@ You can now use:
 
 ```swift
 deviceManager.deviceType
-deviceManager.orientation
-deviceManager.orientationDetail
+deviceManager.interfaceOrientation
+deviceManager.deviceOrientation
+deviceManager.deviceOrientationDetail
 ```
 
 ## 📦 Requirements

@@ -39,7 +39,31 @@ class DeviceManager: ObservableObject {
     }
     
     #if os(iOS)
-    func updateInterfaceOrientation(_ orientation: UIInterfaceOrientation) {
+    private func initOrientationPublisher() -> Void {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
+            .compactMap { _ -> (UIInterfaceOrientation, UIDeviceOrientation)? in
+                guard let interfaceOrientation = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first?.interfaceOrientation else { return nil }
+                let deviceOrientation = UIDevice.current.orientation
+                return (interfaceOrientation, deviceOrientation)
+            }
+            .sink { [weak self] interfaceOrientation, deviceOrientation in
+                guard let self else { return }
+                self.updateInterfaceOrientation(interfaceOrientation)
+                self.updateDeviceOrientation(deviceOrientation)
+                logger.debug("Interface: \(self.interfaceOrientation.rawValue), Device: \(self.deviceOrientation.rawValue) (\(self.deviceOrientationDetail.rawValue))")
+            }
+            .store(in: &cancellables)
+    }
+    
+    func cancelOrientationPublisher() -> Void {
+        cancellables.removeAll()
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
+    
+    private func updateInterfaceOrientation(_ orientation: UIInterfaceOrientation) {
         switch orientation {
         case .portrait: self.interfaceOrientation = .portrait
         case .portraitUpsideDown: self.interfaceOrientation = .portraitUpsideDown
@@ -49,7 +73,7 @@ class DeviceManager: ObservableObject {
         }
     }
     
-    func updateDeviceOrientation(_ orientation: UIDeviceOrientation) {
+    private func updateDeviceOrientation(_ orientation: UIDeviceOrientation) {
         switch orientation {
         case .portrait:
             updateOrientationValues(correctOrientation: orientation.isPortrait, orientation: .portrait, detailOrientation: .portrait)
@@ -73,30 +97,6 @@ class DeviceManager: ObservableObject {
         if correctOrientation {
             self.deviceOrientation = orientation
         }
-    }
-    
-    func initOrientationPublisher() -> Void {
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
-            .compactMap { _ -> (UIInterfaceOrientation, UIDeviceOrientation)? in
-                guard let interfaceOrientation = UIApplication.shared.connectedScenes
-                    .compactMap({ $0 as? UIWindowScene })
-                    .first?.interfaceOrientation else { return nil }
-                let deviceOrientation = UIDevice.current.orientation
-                return (interfaceOrientation, deviceOrientation)
-            }
-            .sink { [weak self] interfaceOrientation, deviceOrientation in
-                guard let self else { return }
-                self.updateInterfaceOrientation(interfaceOrientation)
-                self.updateDeviceOrientation(deviceOrientation)
-                logger.debug("Interface: \(self.interfaceOrientation.rawValue), Device: \(self.deviceOrientation.rawValue) (\(self.deviceOrientationDetail.rawValue))")
-            }
-            .store(in: &cancellables)
-    }
-    
-    func cancelOrientationPublisher() -> Void {
-        cancellables.removeAll()
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
     #endif
 }
