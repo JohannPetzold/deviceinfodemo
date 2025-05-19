@@ -39,13 +39,13 @@ class DeviceManager: ObservableObject {
     }
     
     #if os(iOS)
-    func updateInterfaceOrientation(_ orientation: UIInterfaceOrientation) -> InterfaceOrientation {
+    func updateInterfaceOrientation(_ orientation: UIInterfaceOrientation) {
         switch orientation {
-        case .portrait: return .portrait
-        case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeLeft
-        case .landscapeRight: return .landscapeRight
-        default: return .unknown
+        case .portrait: self.interfaceOrientation = .portrait
+        case .portraitUpsideDown: self.interfaceOrientation = .portraitUpsideDown
+        case .landscapeLeft: self.interfaceOrientation = .landscapeLeft
+        case .landscapeRight: self.interfaceOrientation = .landscapeRight
+        default: self.interfaceOrientation = .unknown
         }
     }
     
@@ -76,26 +76,20 @@ class DeviceManager: ObservableObject {
     }
     
     func initOrientationPublisher() -> Void {
-        NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
-            .compactMap { notification in
-                UIApplication.shared.connectedScenes
-                    .compactMap({ $0 as? UIWindowScene })
-                    .first?.interfaceOrientation
-            }
-            .sink { newOrientation in
-                self.interfaceOrientation = self.updateInterfaceOrientation(newOrientation)
-                logger.debug("New orientation: \(self.interfaceOrientation.rawValue)")
-            }
-            .store(in: &cancellables)
-        
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
-            .compactMap { notification in
-                UIDevice.current.orientation
+            .compactMap { _ -> (UIInterfaceOrientation, UIDeviceOrientation)? in
+                guard let interfaceOrientation = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first?.interfaceOrientation else { return nil }
+                let deviceOrientation = UIDevice.current.orientation
+                return (interfaceOrientation, deviceOrientation)
             }
-            .sink { newOrientation in
-                self.updateDeviceOrientation(newOrientation)
-                logger.debug("New orientation: \(self.deviceOrientation.rawValue) (\(self.deviceOrientationDetail.rawValue))")
+            .sink { [weak self] interfaceOrientation, deviceOrientation in
+                guard let self else { return }
+                self.updateInterfaceOrientation(interfaceOrientation)
+                self.updateDeviceOrientation(deviceOrientation)
+                logger.debug("Interface: \(self.interfaceOrientation.rawValue), Device: \(self.deviceOrientation.rawValue) (\(self.deviceOrientationDetail.rawValue))")
             }
             .store(in: &cancellables)
     }
@@ -137,7 +131,9 @@ enum InterfaceOrientation : String {
         #if os(iOS)
         guard let orientation = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
-            .first?.interfaceOrientation else { return .unknown }
+            .first?.interfaceOrientation else {
+            return .unknown
+        }
         switch orientation {
         case .portrait: return .portrait
         case .portraitUpsideDown: return .portraitUpsideDown
